@@ -1,0 +1,15 @@
+ <html>
+    <head>
+        <link rel="stylesheet" type="text/css" href="Viewer.js/viewer.css" media="screen"/>
+        <script src="Viewer.js/viewer.js" type="text/javascript" charset="utf-8"></script>
+    </head>
+    
+    <body>
+    	<a href="Viewer.js#../demo/zhipeng.odp">
+	<!--
+    	<iframe id="viewer" src = "Viewer.js/#../../demo/zhipeng.odp" width='400' height='300' allowfullscreen webkitallowfullscreen>
+	-->
+    </body>
+    
+    
+</html>
