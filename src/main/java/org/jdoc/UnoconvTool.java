@@ -1,13 +1,14 @@
 package org.jdoc;
 
 import java.io.File;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * use Unoconv to convert office doc to pdf, 
- * and use http://viewerjs.org/ to display.
+ * use Unoconv to convert office doc to pdf, and use http://viewerjs.org/ to
+ * display.
  * 
  * <pre>
  * 1) install unoconf
@@ -18,8 +19,7 @@ import org.slf4j.LoggerFactory;
  * 2) install libreoffice  
  *    > apt-get install libreoffice
  *    
- *    > apt-get install libreoffice-impress
- *    > apt-get install libreoffice-writer
+ *    
  *    > killall soffice.bin
  *    
  * 3) font 
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  *    > sudo mkfontscale
  *    > sudo mkfontdir
  *    > sudo fc-cache -f -v
- *    
+ * 
  * </pre>
  * 
  */
@@ -41,8 +41,61 @@ public class UnoconvTool {
 
 	static long time_out = 5 * 60 * 1000;
 
-	public UnoconvTool() {
+	public static UnoconvTool instance = new UnoconvTool(true);
+	
+	// at most blocking 1024 task
+	ArrayBlockingQueue<Task> queue = new ArrayBlockingQueue<Task>(1024);
+	
+	boolean winOS = false;
+	
+	static class Task {
+		File file;
+		String format;
+		String outputDir;
 
+		public Task(File file, String format, String outputDir) {
+			this.file = file;
+			this.format = format;
+			this.outputDir = outputDir;
+		}
+	}
+	
+	public UnoconvTool(boolean startDaemon) {
+		String os = System.getProperty("os.name").toLowerCase();
+		if (os.indexOf("win") >= 0) {
+			winOS = true;
+		}
+		
+		if (!winOS && startDaemon) {
+			startDaemon();
+		}
+	}
+
+	void startDaemon() {
+		final String name = "Unoconv-Thread";
+		Thread t = new Thread(new Runnable() {
+
+			@Override
+			public void run() {
+				while (true) {
+					try {
+						Task task = queue.take();
+						
+						convert(task.file.getAbsolutePath(), task.format, task.outputDir);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+						break;
+					}
+				}
+
+				logger.info("{} is stopped ", name);
+			}
+
+		}, name);
+
+		t.setDaemon(true);
+		t.start();
+		logger.info("{} is started ", name);
 	}
 
 	/**
@@ -51,8 +104,16 @@ public class UnoconvTool {
 	 * @param file
 	 * @param outputDir
 	 */
-	public void add(String file, String outputDir) {
+	public void add(File file, String format, String outputDir) {
+		// simple return
+		if (winOS)
+			return;
+		
+		boolean add = queue.offer(new Task(file, format, outputDir));
 
+		if (!add) {
+			logger.error("unoconv is full, something wrong");
+		}
 	}
 
 	public static boolean convert(String file, String outputDir) {
@@ -80,7 +141,7 @@ public class UnoconvTool {
 		String cmd = String.format("unoconv -f %s -o %s %s", outputformat,
 				outputDir, file);
 
-		logger.info("convert  {} {} {}  ", file, outputformat, outputDir);
+		logger.info(cmd);
 		boolean success = true;
 		try {
 			Process p = Runtime.getRuntime().exec(cmd);
@@ -88,13 +149,11 @@ public class UnoconvTool {
 			int retCode = p.exitValue();
 			if (retCode != 0) {
 				success = false;
-				logger.info("convert return {} {} {} - {} ", file,
-						outputformat, outputDir, retCode);
+				logger.error(cmd + " exit " + retCode);
 			}
 		} catch (Exception e) {
 			success = false;
-			logger.info("convert return {} {} {} - {} ", file, outputformat,
-					outputDir, e);
+			logger.error(cmd, e);
 		}
 
 		return success;
